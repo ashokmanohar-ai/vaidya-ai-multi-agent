@@ -1,0 +1,3 @@
+-r requirements.txt
+# Official Sarvam SDK, batch-job create/upload/start/wait/download.
+sarvamai==0.1.36

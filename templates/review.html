@@ -1,0 +1,154 @@
+{% extends 'base.html' %}
+{% block title %}Review Report · Vaidya AI{% endblock %}
+{% block breadcrumb %}Report review{% endblock %}
+{% block body %}
+<div class="pagehead">
+  <div><div class="eyebrow">{{'APPROVED SYNTHETIC REPORT' if job.status == 'approved' else 'CLINICIAN REVIEW REQUIRED'}}</div>
+    <h1>{{job.patient_name}} <span class="muted-title">/ {{job.patient_code}}</span></h1>
+    <p>Job {{job.id[:12]}} · {{job.created_at[:16]|replace('T',' ')}} UTC</p></div>
+  <a class="btn secondary" href="{{url_for('dashboard')}}">← All reports</a>
+</div>
+<div class="review-banner"><div class="review-icon">{{'✓' if job.status=='approved' else '!'}}</div><div>
+  <strong>{{'Synthetic report was clinician-approved' if job.status=='approved' else 'UNVERIFIED AI DRAFT — not for clinical use'}}</strong>
+  <p>Before approval, verify the source recording, linked patient, numbers, clinical negations and Tamil-English editing instructions.</p>
+</div><span class="status {{job.status}}">{{job.status|replace('_',' ')|title}}</span></div>
+{% if assessment.get('blocking_issues') and job.status!='approved' %}
+<div class="card" style="border:2px solid #b42318;padding:18px;margin-bottom:22px;background:#fff7f5" role="alert">
+  <h2 style="color:#9e2117;margin-top:0">Approval blocked: patient identity or clinical contradiction</h2>
+  <p>Listen to the recording and resolve source transcription or extraction differences before approval. Unverified facts cannot be assumed from an external report.</p>
+  <ul>{% for problem in assessment.blocking_issues %}<li>{{problem}}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+<div class="workcols">
+<div class="card formcard">
+  <div class="sectitle"><div class="num">✓</div><div><h2>Draft report preview</h2><p>Extracted by {{job.provider}} / {{job.model}}; all clinical content remains unverified.</p></div></div>
+  <div class="document">
+    <div class="doc-brand">BRINDHA PATHOLOGY &amp; DIAGNOSTICS</div>
+    <div class="doc-label">HISTOPATHOLOGY REPORT · AUDIO TRANSCRIPTION / UNVERIFIED</div>
+    <div class="doc-patient"><strong>{{job.patient_name or 'Patient name not captured'}}</strong><span>{{'Audio-derived candidate' if audio_identity else job.patient_code}}</span></div>
+    {% set spoken=assessment.get('spoken_patient',{}) %}
+    {% if spoken.get('name') or spoken.get('age') %}
+    <p class="source"><b>Dictated patient (unverified):</b> {{spoken.get('name') or 'Unknown'}} · {{spoken.get('age') if spoken.get('age') is not none else 'Age unknown'}} · {{spoken.get('sex') or 'Sex unknown'}}</p>
+    {% endif %}
+    {% if assessment.get('sections_unverified') %}
+      {% for key,title in [('context','Intake context'),('gross','Gross description'),('microscopy','Microscopy'),('impression','Impression')] %}
+        <h3>{{title}} — unverified</h3>
+        <p class="finding">{{assessment.sections_unverified.get(key) or '[Not clearly dictated]'}}</p>
+      {% endfor %}
+    {% else %}
+      <h3>Dictated observations — unverified</h3>
+      {% for f in findings %}<p class="finding">{{f.text}}</p>{% else %}<p class="muted">No extracted findings: clarification required.</p>{% endfor %}
+    {% endif %}
+    <div class="doc-foot">UNVERIFIED ASR DRAFT · Doctor verification required · Not for clinical use</div>
+  </div>
+  <div class="inline-actions">
+    <a class="btn secondary" href="{{url_for('download',job_id=job.id)}}">↓ Download unverified DOCX</a>
+    {% if job.status=='approved' %}<a class="btn primary" href="{{url_for('final_download',job_id=job.id)}}">↓ Download synthetic doctor final</a>{% endif %}
+  </div>
+  {% if job.status=='draft_ready' %}
+  <div class="formsec"><div class="sectitle"><div class="num">4</div><div><h2>Verified structured report editor</h2><p>Every candidate below is a tentative ASR extraction. Correct from original audio and confirm each field. No automatic clinical corrections are performed.</p></div></div>
+  <form method="post" action="{{url_for('approve_structured_report',job_id=job.id)}}">
+    <input type="hidden" name="_csrf" value="{{csrf_token()}}">
+    {% if audio_identity %}
+    <div class="card" style="padding:14px;margin:12px 0;background:#fafcff">
+      <h3>Patient information extracted from audio — verify against recording</h3>
+      <p class="muted">These are unverified Sarvam ASR candidates, not registration data. Correct only from source evidence.</p>
+      <label for="patient_name">Patient full name *</label>
+      <input id="patient_name" name="patient_name" value="{{assessment.spoken_patient.name or ''}}" maxlength="80" required>
+      <div class="twofields"><div><label for="patient_age">Age *</label>
+      <input id="patient_age" name="patient_age" type="number" min="0" max="120" value="{{assessment.spoken_patient.age if assessment.spoken_patient.age is not none else ''}}" required></div>
+      <div><label for="patient_sex">Sex *</label><select id="patient_sex" name="patient_sex" required>
+       <option value="">Choose after verifying audio</option>{% for value in ['Female','Male','Other'] %}<option value="{{value}}" {% if assessment.spoken_patient.sex==value %}selected{% endif %}>{{value}}</option>{% endfor %}</select></div></div>
+      <label>Evidence for any correction or missing ASR information</label>
+      <textarea name="identity_correction_note" maxlength="500" rows="2" placeholder="Required if you change any audio-derived demographic or fill a missing value."></textarea>
+      <label class="check"><input name="confirmed_patient_identity" type="checkbox" value="yes" required><span>I listened to the original audio and verified these patient details.</span></label>
+    </div>
+    {% endif %}
+    {% for field in field_candidates %}
+    <div class="card" style="padding:12px;margin-bottom:12px;background:#fafcff">
+      <label for="field_{{field.key}}">{{field.label}} <em>*</em></label>
+      <small class="muted">{{field.source_status}} — confirm directly from source</small>
+      {% if field.key in ('gross','microscopy','impression') %}
+      <textarea id="field_{{field.key}}" name="{{field.key}}" maxlength="{{field.limit}}" rows="4" required>{{field.candidate}}</textarea>
+      {% else %}
+      <input id="field_{{field.key}}" name="{{field.key}}" value="{{field.candidate}}" maxlength="{{field.limit}}" required {% if field.key in ('received_date','reported_date') %}placeholder="DD/MM/YYYY" pattern="[0-9]{2}/[0-9]{2}/[0-9]{4}"{% endif %}>
+      {% endif %}
+      <label class="check"><input name="confirmed_{{field.key}}" type="checkbox" value="yes" required><span>Verified against original evidence (not just ASR text)</span></label>
+    </div>
+    {% endfor %}
+    {% if assessment.get('blocking_issues') %}
+      <p class="muted">For legacy manually selected patient records, identity conflicts require selecting the correct patient and creating a new draft. In audio-only mode patient data is captured from transcription and independently confirmed above.</p>
+      <label class="check"><input name="resolve_name_spelling" type="checkbox" value="yes"><span>I listened to the original audio and verified that the selected synthetic patient name is the correct spelling (minor ASR spelling difference only).</span></label>
+      <label>Reason / evidence for a name-spelling correction</label><textarea name="name_resolution_note" rows="2" maxlength="500" placeholder="State the source evidence supporting this spelling."></textarea>
+    {% endif %}
+    {% if assessment.get('has_audio') %}
+      {% for key,label in [
+        ('verified_audio','I listened to the source audio'),
+        ('verified_identity','I verified patient identity and referring doctor names'),
+        ('verified_numbers','I verified sample ID, dates and measurements'),
+        ('verified_negations','I verified every medical negation and cell finding'),
+        ('verified_instructions','I separated Tamil-English administrative instructions from findings')
+      ] %}<label class="check"><input type="checkbox" name="{{key}}" value="yes" required><span>{{label}}</span></label>{% endfor %}
+    {% endif %}
+    <label class="check"><input type="checkbox" name="attest" value="yes" required><span>I have manually verified every field for this SYNTHETIC example. This is not an authorization to use real clinical data.</span></label>
+    <button class="btn primary" type="submit">Generate reviewed structured DOCX</button>
+  </form></div>
+  {% if not assessment.get('has_audio') %}
+  <div class="formsec"><div class="sectitle"><div class="num">5</div><div><h2>Legacy typed-text editor</h2><p>Do not approve until discrepancies are resolved against the recording.</p></div></div>
+  <form method="post" action="{{url_for('approve_report',job_id=job.id)}}">
+    <input type="hidden" name="_csrf" value="{{csrf_token()}}">
+    <label for="final_text">Reviewed final synthetic report text <em>*</em></label>
+    <textarea id="final_text" name="final_text" rows="16" required>{{job.draft_text}}</textarea>
+    {% if assessment.get('has_audio') %}
+      <p><strong>Audio verification checklist — required</strong></p>
+      {% for key,label in [
+         ('verified_audio','I listened to the ORIGINAL source audio, not just the ASR output.'),
+         ('verified_identity','I verified the patient, age, sex and referring-doctor names.'),
+         ('verified_numbers','I verified the biopsy ID, all dates and every measurement.'),
+         ('verified_negations','I verified medical negations including the presence/absence of atypical cells.'),
+         ('verified_instructions','I separated Tamil-English report editing instructions from pathological observations.')
+      ] %}
+      <label class="check"><input type="checkbox" name="{{key}}" value="yes" required><span>{{label}}</span></label>
+      {% endfor %}
+    {% endif %}
+    <label class="check"><input type="checkbox" name="attest" value="yes" required><span>I reviewed and corrected this SYNTHETIC draft; this does not certify the application for clinical use.</span></label>
+    <button class="btn primary" type="submit" {% if assessment.get('blocking_issues') %}disabled title="Resolve blocking issues before approval"{% endif %}>✓ Approve corrected synthetic report</button>
+    {% if assessment.get('blocking_issues') %}<p class="muted">Approval is disabled because source details conflict with the selected patient or another critical condition.</p>{% endif %}
+  </form></div>
+  {% endif %}
+  {% else %}
+    <div class="approved-panel">✓ Synthetic report approved at {{job.approved_at[:16]}} UTC.</div>
+    {% if checkpoint.exists and checkpoint.pending_nodes %}
+    <div class="alert subtle">The LangGraph approval checkpoint remains pending; retry the learner separately.</div>
+    <form method="post" action="{{url_for('resume_approved_job',job_id=job.id)}}"><input type="hidden" name="_csrf" value="{{csrf_token()}}"><button class="btn secondary sm">Retry graph resume</button></form>
+    {% endif %}
+  {% endif %}
+</div>
+<div class="sidecolumn">
+  <div class="card"><span class="chip">SOURCE AND SAFETY EVIDENCE</span>
+    <h3>Original code-mixed dictation / ASR</h3><p class="source">{{job.original_transcript}}</p>
+    <h3>Extraction input</h3><p class="source">{{job.translated_transcript}}</p>
+    <p class="muted">Unchanged text indicates translation may be disabled. The source transcript is an unverified ASR hypothesis.</p>
+    <h3>Voice-note provenance</h3><p class="muted">{{audio_count}} audio note(s). Original transcript is preserved separately.</p>
+    {% if asr_inputs %}<ul>{% for item in asr_inputs %}<li>{{item.asr_provider or 'unknown'}} / {{item.asr_model or 'unknown'}} · {{item.asr_mode or 'mode unknown'}} · {{item.language or 'undetermined'}}{% if item.audio_sha256 %}<small> · audio SHA-256 {{item.audio_sha256[:12]}}…</small>{% endif %}{% if item.transcript_sha256 %}<small> · transcript SHA-256 {{item.transcript_sha256[:12]}}…</small>{% endif %}</li>{% endfor %}</ul>{% endif %}
+    {% if assessment.get('review_warnings') %}<h3>Issues requiring verification</h3><ul>{% for issue in assessment.review_warnings %}<li>{{issue}}</li>{% endfor %}</ul>{% endif %}
+    <h3>Administrative / formatting commands (unverified)</h3>
+    {% set edits=assessment.get('instruction_candidates') or [] %}
+    {% if edits %}<ul>{% for edit in edits %}<li>{{edit}}</li>{% endfor %}</ul>
+    {% elif instructions %}<ul>{% for edit in instructions %}<li>{{edit.instruction}}</li>{% endfor %}</ul>
+    {% else %}<p class="muted">No separate editing instruction identified. Doctor must still compare source audio.</p>{% endif %}
+    <div class="alert subtle">This localhost app accepts synthetic demonstration inputs only. It is not a clinically validated report-generation system.</div>
+  </div>
+  <div class="card note"><b>Audit and provenance</b>
+    {% if review_metadata.get('source')=='manual_verified_fields' %}
+    <p><b>Manual structured review:</b> {{review_metadata.get('reviewed_at_utc')}} · reviewer ID {{review_metadata.get('reviewed_by_user_id')}}.</p>
+    {% if review_metadata.get('name_resolution_note') %}<p>Minor ASR name spelling reconciled with recorded review explanation: {{review_metadata.get('name_resolution_note')}}</p>{% endif %}
+    {% endif %}<p>Extraction: {{job.provider}} / {{job.model}}<br>Status: {{job.status}}<br>ASR: {{audio_count}} voice note(s)</p></div>
+</div>
+</div>
+<div class="card audit" style="margin-top:18px"><div class="cardhead"><div><h2>LangGraph execution trace</h2><p>Persisted node events; checkpoint persistence is not clinical validation.</p></div><span class="chip">{{'CHECKPOINT SAVED' if checkpoint.exists else 'LEGACY FIXTURE'}}</span></div>
+  {% if trace %}<div class="table-wrap"><table><thead><tr><th>AGENT</th><th>NODE / STAGE</th><th>STATE</th><th>UTC</th></tr></thead><tbody>{% for t in trace %}<tr><td>{{t.agent|replace('_',' ')|title}}</td><td><code>{{t.stage}}</code></td><td>{{t.status}}</td><td>{{t.created_at[:19]}}</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}<p class="muted">No LangGraph trace stored for this historical fixture.</p>{% endif %}
+  <p class="muted">Graph checkpoint: {{checkpoint.checkpoint_id if checkpoint.exists else 'not created'}} · Stage: {{checkpoint.stage if checkpoint.exists else 'N/A'}}.</p>
+</div>
+{% endblock %}

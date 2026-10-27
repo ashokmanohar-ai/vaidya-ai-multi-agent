@@ -1,0 +1,37 @@
+# Infrastructure reference for an approved NON-PRODUCTION staging environment.
+# Do not use these placeholder credentials or unapproved regions with real patients.
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: vaidya
+      POSTGRES_PASSWORD: ${STAGING_POSTGRES_PASSWORD:?Set strong password}
+      POSTGRES_DB: vaidya
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U vaidya -d vaidya"]
+      interval: 5s
+      retries: 10
+  web:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    ports:
+      - "127.0.0.1:8088:8080"
+    env_file: ../.env.production.local
+    command: ["gunicorn","-w","2","--threads","4","-b","0.0.0.0:8080","production_app:app"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+  worker:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    env_file: ../.env.production.local
+    command: ["python","-m","production.worker"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+volumes:
+  pgdata:

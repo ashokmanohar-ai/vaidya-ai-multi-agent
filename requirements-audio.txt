@@ -1,0 +1,9 @@
+-r requirements.txt
+
+# Local CPU audio transcription
+faster-whisper==1.2.1
+
+# Compatibility: faster-whisper 1.2.1 uses
+# av.open(metadata_errors="ignore")
+# PyAV 19 removed this argument.
+av==18.1.0

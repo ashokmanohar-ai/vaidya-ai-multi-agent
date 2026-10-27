@@ -1,0 +1,22 @@
+# Only source files enter the container build context.
+.env
+.env.*
+!.env.example
+!.env.production.example
+.venv/
+venv/
+instance/
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.git/
+*.sqlite3
+*.db
+*.ogg
+*.wav
+*.mp3
+*.m4a
+*.webm
+*.zip
+qa/

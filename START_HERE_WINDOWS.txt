@@ -1,0 +1,128 @@
+VAIDYA AI — SARVAM V4 + STRUCTURED PATHOLOGY REVIEW (27 OCT 2026)
+===================================================================
+LOCAL SYNTHETIC-ONLY DEMO · NOT VALIDATED FOR CLINICAL USE
+
+Use a NEW folder for the enhanced ZIP. The patient/audio/reference files from
+this conversation are NOT inside the project ZIP. No API key is bundled.
+
+VAIDYA AI — SARVAM SAARAS V4 SAFETY UPDATE (18 OCT 2026)
+========================================================
+LOCAL SYNTHETIC-DEMO ONLY. NO REAL PATIENT DATA OR CLINICAL USE.
+
+1. Unzip to a new clean directory such as C:\vaidya-ai-sarvam\vaidya-ai-main
+2. In Windows PowerShell (from this folder):
+
+   py -3.12 -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   python -m pip install -r requirements-dev.txt
+   Copy-Item .env.example .env
+   notepad .env
+
+3. Edit .env (never share your API key):
+
+   DEMO_MODE=true
+   ASR_PROVIDER=sarvam
+   SARVAM_API_KEY=<YOUR_PRIVATE_KEY>
+   SARVAM_MODE=codemix
+   SARVAM_LANGUAGE_CODE=unknown
+   ALLOW_REMOTE_SYNTHETIC_INPUT=true
+   TRANSLATION_PROVIDER=passthrough
+   LLM_PROVIDER=demo
+
+   Cloud audio is billable. Only enable remote processing for suitably approved
+   synthetic/de-identified test audio under your privacy agreements.
+   LLM_PROVIDER=demo is rule-based, not medically intelligent extraction.
+
+4. Validate and run:
+
+   python scripts\preflight.py
+   python scripts\validate_complete.py
+   python scripts\run_demo.py
+
+5. Open http://127.0.0.1:5055
+   If the port is occupied: $env:PORT="8765"; python scripts\run_demo.py
+
+6. Use the synthetic demo account documented in README.md.
+   The selected PATIENT must match the content of the SYNTHETIC dictation.
+   Mismatches will intentionally block approval. Old drafts are NOT automatically corrected.
+
+DETAILS: docs\SARVAM_SAARAS_V4_INTEGRATION.md
+         docs\CLINICAL_SAFETY_VALIDATION_PATCH.md
+         VALIDATION_REPORT_SAFETY_PATCH.md
+
+NOT VERIFIED HERE: live Sarvam call, native Windows runtime, all LangGraph/Flask
+integration tests or clinical accuracy. These MUST be validated before relying
+on the application; the package cannot guarantee issue-free execution.
+
+DEEP RE-AUDIT (27 OCT 2026): See DEEP_AUDIT_REPORT_2026-10-27.md.
+The package contains additional safety checks and a Dockerfile build-context fix.
+All 4 framework-dependent skipped tests must pass on your Windows machine.
+Do NOT deploy the separate production worker with ASR_PROVIDER=sarvam;
+production Sarvam requires separate governance/design and is not enabled.
+
+ENHANCED REVIEW WORKFLOW (27 OCT 2026)
+--------------------------------------
+1. On Create report, first create a MATCHING FICTIONAL patient using
+   the new Synthetic patient form (DEMO-... reference, name, age, sex).
+2. Create a new draft with synthetic Tamil/English transcription or approved
+   synthetic voice note. Previously saved drafts are never corrected silently.
+3. Review all 8 candidate fields. BLANK DATES for malformed ASR are deliberate;
+   manually enter verified DD/MM/YYYY dates. Confirm every field one-by-one.
+4. Where the ASR has a one-letter name spelling mismatch and same age/sex,
+   supply an audio-based reconciliation explanation. Completely different
+   patient records continue to block approval.
+5. Submit Generate reviewed structured DOCX and download the final file.
+6. For an offline synthetic output example run:
+   python scripts\validate_structured_review.py
+   See demo_outputs\VAIDYA_Synthetic_Structured_Verified_Example.docx
+
+READ: docs\STRUCTURED_REPORT_ENHANCEMENT_2026-10-27.md
+VALIDATION: ENHANCEMENT_VALIDATION_2026-10-27.md
+
+DO NOT EXPECT UNVERIFIED AUDIO TO AUTO-CORRECT NAMES, DATES, SPECIMEN IDs,
+OR THE WORD NO. Confirm with a human reviewer.
+
+
+AUDIO-DERIVED WORKFLOW (new, recommended)
+--------------------------------------
+1. In .env: DEMO_MODE=true, AUDIO_ONLY_MODE=true, ASR_PROVIDER=sarvam,
+   SARVAM_API_KEY=private API key, SARVAM_MODE=codemix,
+   SARVAM_LANGUAGE_CODE=unknown, ALLOW_REMOTE_SYNTHETIC_INPUT=true
+   (ONLY for explicitly approved de-identified or synthetic evaluation audio).
+2. Set LLM_PROVIDER=bedrock and configure AWS credentials for AI extraction,
+   or choose LLM_PROVIDER=demo only for limited rule-based *real-transcript*
+   structural parsing; that mode does not call an LLM.
+3. Run python scripts/run_real_audio.py (no sample report seeding).
+4. Register/select a corresponding VERIFIED test patient (this is still a
+   restricted local demonstration with demo authentication), upload actual
+   .ogg/.wav/.mp3 audio, and generate draft. Do not type a transcript.
+5. Review the raw ASR output, source hash and structured fields; correct
+   suspect dates, clinical negations and names against recording.
+6. For independent direct Sarvam check, run:
+   python scripts/transcribe_real_audio.py --audio C:\\path\\sample.ogg --output C:\\path\\private-result --confirm-approved-upload
+   The command makes a real paid API call and cannot run without credentials.
+7. Compare transcript.txt to a HUMAN-VERIFIED VERBATIM reference with:
+   python scripts/evaluate_transcription.py --reference ref.txt --candidate transcript.txt --critical-phrase "no atypical cells"
+   A formatted pathology report is not a verbatim WER reference.
+8. For full local verification install requirements-dev.txt and run:
+   python scripts/validate_complete.py
+This app is NOT clinically validated; do not upload identifiable patient audio
+without vendor, data protection, security and organizational authorization.
+
+
+27 OCT 2026 — AUDIO-FIRST PATIENT HANDLING
+-----------------------------------------
+Use: python scripts\run_real_audio.py
+Open: http://127.0.0.1:5055
+The Create a new report page now has NO mandatory Patient dropdown and
+NO synthetic patient registration in audio-only mode.
+Upload only an approved, de-identified evaluation recording. Sarvam must
+complete the real job before an unverified name/age/sex candidate is saved.
+In the Structured Review editor, confirm or correct each field from the
+source recording. Unclear patient details are blank (never fabricated).
+If the old patient dropdown still appears: stop the old Python process,
+extract this ZIP into a NEW directory, launch run_real_audio.py from the new
+folder, and perform a full browser reload (Ctrl+F5). Do not run run_demo.py
+without AUDIO_ONLY_MODE=true.
+No clinical deployment claim is made. Live Sarvam API and Windows runtime
+verification require your own approved credentials and environment.
